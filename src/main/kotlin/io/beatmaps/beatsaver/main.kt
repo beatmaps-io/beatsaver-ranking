@@ -13,7 +13,7 @@ import io.beatmaps.common.db.upsert
 import io.beatmaps.common.dbo.*
 import io.beatmaps.common.jackson
 import io.beatmaps.common.randomClient
-import io.beatmaps.zip.ZipHelper
+import io.beatmaps.common.zip.ZipHelper
 import io.beatmaps.zip.parseDifficulty
 import io.ktor.client.*
 import io.ktor.client.engine.apache.*

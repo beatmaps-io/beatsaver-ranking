@@ -57,6 +57,8 @@ dependencies {
 
     implementation("io.beatmaps:Common")
     implementation("io.beatmaps:CommonMP")
+
+    runtimeOnly(files("BeatMaps-BeatSage-1.0-SNAPSHOT.jar"))
 }
 
 tasks.withType<KotlinCompile>() {
