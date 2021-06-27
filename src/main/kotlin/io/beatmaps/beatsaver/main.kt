@@ -2,6 +2,7 @@ package io.beatmaps.beatsaver
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import io.beatmaps.common.SSGameMode
+import io.beatmaps.common.api.ECharacteristic
 import io.beatmaps.common.api.EDifficulty
 import io.beatmaps.common.api.EMapState
 import io.beatmaps.common.api.searchEnum
@@ -15,8 +16,6 @@ import io.beatmaps.common.jackson
 import io.beatmaps.common.randomClient
 import io.beatmaps.common.zip.ZipHelper
 import io.beatmaps.zip.parseDifficulty
-import io.ktor.client.*
-import io.ktor.client.engine.apache.*
 import io.ktor.client.features.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -27,6 +26,7 @@ import kotlinx.coroutines.time.delay
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.coalesce
 import pl.jutupe.ktor_rabbitmq.RabbitMQ
 import pl.jutupe.ktor_rabbitmq.publish
 import java.io.ByteArrayOutputStream
@@ -178,6 +178,10 @@ fun startScraper(mq: RabbitMQ) {
                     it[noodle] = stats.any { s -> s.noodle }
                     it[minNps] = stats.minByOrNull { s -> s.nps }?.nps?.min(maxAllowedNps) ?: BigDecimal.ZERO
                     it[maxNps] = stats.maxByOrNull { s -> s.nps }?.nps?.min(maxAllowedNps) ?: BigDecimal.ZERO
+                    it[fullSpread] = info._difficultyBeatmapSets
+                        .firstOrNull { set -> set.enumValue() == ECharacteristic.Standard }?._difficultyBeatmaps
+                        ?.map { diff -> diff.enumValue() }
+                        ?.distinct()?.count() == 5
                 }
 
                 val file = fromInfo(info._coverImageFilename)
@@ -204,7 +208,7 @@ fun startScraper(mq: RabbitMQ) {
 
         var page = 0
 
-        val maxPages = 2600
+        val maxPages = 2900
         val batchSize = 100
         val partitions = maxPages / batchSize
 
@@ -248,6 +252,26 @@ fun startScraper(mq: RabbitMQ) {
     }
 
     GlobalScope.launch(es.asCoroutineDispatcher()) {
+        val qualifiedHashes = transaction {
+            Versions
+                .join(Beatmap, JoinType.INNER, Beatmap.id, Versions.mapId)
+                .slice(Versions.hash)
+                .select {
+                    Beatmap.qualified eq true
+                }.map { it[Versions.hash] }.toHashSet()
+        }
+
+        delay(Duration.ofMinutes(4))
+
+        while (true) {
+            println("Scoresaber quals")
+            scrapeQualified(qualifiedHashes)
+
+            delay(Duration.ofHours(1))
+        }
+    }
+
+    GlobalScope.launch(es.asCoroutineDispatcher()) {
         val rankedHashes = transaction {
             Difficulty
                 .join(Versions, JoinType.INNER, Versions.id, Difficulty.versionId)
@@ -265,15 +289,48 @@ fun startScraper(mq: RabbitMQ) {
                 println("Scoresaber ${page - 1}")
             }
 
-            delay(Duration.ofDays(1))
+            delay(Duration.ofHours(1))
         }
     }
 }
+
+data class ScoreSaberUniqueList(val songs: List<ScoreSaberSongUnique>)
+data class ScoreSaberSongUnique(val uid: Int, val id: String, val name: String, val songSubName: String, val songAuthorName: String, val levelAuthorName: String, val bpm: Int, val scores_day: Int, val ranked: Boolean, val stars: Float, val image: String)
 
 data class ScoreSaberList(val songs: List<ScoreSaberSong>)
 data class ScoreSaberSong(val uid: Int, val id: String, val name: String, val songSubName: String, val songAuthorName: String, val levelAuthorName: String, val bpm: Int, val diff: String, val scores: String, val scores_day: Int, val ranked: Boolean, val stars: Float, val image: String) {
     val characteristic = searchEnum<SSGameMode>(diff.split('_')[2]).characteristic
     val difficulty = searchEnum<EDifficulty>(diff.split('_')[1])
+}
+
+suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
+    val json = randomClient.get<String>("https://scoresaber.com/api.php?function=get-leaderboards&cat=5&qualified=1&unique=1&page=1&limit=200") {
+        timeout {
+            socketTimeoutMillis = 30000
+            requestTimeoutMillis = 60000
+        }
+    }
+    val qualifiedMaps = jackson.readValue<ScoreSaberUniqueList>(json).songs.map { it.id.lowercase() }.toHashSet()
+    val toRemove = qualifiedHashes.minus(qualifiedMaps)
+    val toAdd = qualifiedMaps.minus(qualifiedHashes)
+
+    transaction {
+        Beatmap
+            .join(Versions, JoinType.INNER, Versions.mapId, Beatmap.id)
+            .update({ Versions.hash inList toRemove }) {
+                it[Beatmap.qualified] = false
+            }
+
+        Beatmap
+            .join(Versions, JoinType.INNER, Versions.mapId, Beatmap.id)
+            .update({ Versions.hash inList toAdd }) {
+                it[Beatmap.qualified] = true
+                it[Beatmap.qualifiedAt] = coalesce(Beatmap.qualifiedAt, NowExpression(Beatmap.qualifiedAt.columnType))
+            }
+    }
+
+    qualifiedHashes.clear()
+    qualifiedHashes.addAll(qualifiedMaps)
 }
 
 suspend fun scrapeRanked(page: Int, rankedHashes: HashSet<String>, limit: Int = 100): Boolean {
@@ -283,20 +340,21 @@ suspend fun scrapeRanked(page: Int, rankedHashes: HashSet<String>, limit: Int = 
             requestTimeoutMillis = 60000
         }
     }
-    val obj = jackson.readValue<ScoreSaberList>(json).songs.filter { it.ranked && it.stars > 0 && !rankedHashes.contains(it.id.toLowerCase()) }
+    val obj = jackson.readValue<ScoreSaberList>(json).songs.filter { it.ranked && it.stars > 0 && !rankedHashes.contains(it.id.lowercase()) }
 
     transaction {
         obj.forEach { diff ->
-            rankedHashes.add(diff.id.toLowerCase())
+            rankedHashes.add(diff.id.lowercase())
             Difficulty
                 .join(Versions, JoinType.INNER, Versions.id, Difficulty.versionId)
-                .update({ Versions.hash eq diff.id.toLowerCase() and (Difficulty.characteristic eq diff.characteristic) and (Difficulty.difficulty eq diff.difficulty) }) {
+                .update({ Versions.hash eq diff.id.lowercase() and (Difficulty.characteristic eq diff.characteristic) and (Difficulty.difficulty eq diff.difficulty) }) {
                     it[Difficulty.stars] = diff.stars.toBigDecimal()
                 }
             Beatmap
                 .join(Versions, JoinType.INNER, Versions.mapId, Beatmap.id)
-                .update({ Versions.hash eq diff.id.toLowerCase() }) {
+                .update({ Versions.hash eq diff.id.lowercase() }) {
                     it[Beatmap.ranked] = true
+                    it[Beatmap.rankedAt] = coalesce(Beatmap.rankedAt, NowExpression(Beatmap.rankedAt.columnType))
                 }
         }
     }
