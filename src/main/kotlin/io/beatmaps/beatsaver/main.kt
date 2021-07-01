@@ -15,7 +15,7 @@ import io.beatmaps.common.dbo.*
 import io.beatmaps.common.jackson
 import io.beatmaps.common.randomClient
 import io.beatmaps.common.zip.ZipHelper
-import io.beatmaps.zip.parseDifficulty
+import io.beatmaps.common.zip.parseDifficulty
 import io.ktor.client.features.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -176,6 +176,9 @@ fun startScraper(mq: RabbitMQ) {
                 Beatmap.update({ Beatmap.id eq beatmapId }) {
                     it[chroma] = stats.any { s -> s.chroma }
                     it[noodle] = stats.any { s -> s.noodle }
+                    it[me] = stats.any { s -> s.me }
+                    it[cinema] = stats.any { s -> s.cinema }
+
                     it[minNps] = stats.minByOrNull { s -> s.nps }?.nps?.min(maxAllowedNps) ?: BigDecimal.ZERO
                     it[maxNps] = stats.maxByOrNull { s -> s.nps }?.nps?.min(maxAllowedNps) ?: BigDecimal.ZERO
                     it[fullSpread] = info._difficultyBeatmapSets
