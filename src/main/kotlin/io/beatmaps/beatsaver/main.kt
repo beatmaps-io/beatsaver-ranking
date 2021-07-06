@@ -49,44 +49,40 @@ data class DownloadAttempts(val mapInfo: BeatsaverMap, val time: Instant = Insta
 
 fun startScraper(mq: RabbitMQ) {
     mq.consumeAck("bs.update", BeatsaverMap::class) { _, map ->
-        transaction {
-            val existingVersion = Versions.update({ Versions.hash eq map.hash }) {
+        val existingVersion = transaction {
+            Versions.update({ Versions.hash eq map.hash }) {
                 it[key64] = map.key
             } > 0
-
-            if (existingVersion) {
-                val oldInfo = BeatmapDao.wrapRows(
+        }
+        if (existingVersion) {
+            transaction {
+                BeatmapDao.wrapRows(
                     Versions
                         .join(Beatmap, JoinType.INNER, Versions.mapId, Beatmap.id)
                         .select {
                             Versions.key64 eq map.key
                         }.limit(1)
-                ).firstOrNull()
-
-                Versions
-                    .join(Beatmap, JoinType.INNER, Versions.mapId, Beatmap.id)
-                    .update({
-                        Versions.key64 eq map.key
-                    }) {
-                        it[Beatmap.name] = map.name
-                        it[Beatmap.description] = map.description
-                        it[Beatmap.automapper] = map.metadata.automapper != null
-                        it[Beatmap.upVotes] = map.stats.upVotes
-                        it[Beatmap.downVotes] = map.stats.downVotes
-                        it[Beatmap.beatsaverDownloads] = map.stats.downloads
-                    }
-
-                // Check if anything important changed
-                if (oldInfo == null || map.name != oldInfo.name || map.description != oldInfo.description || (map.metadata.automapper != null) != oldInfo.automapper) {
-                    val mapId = Versions.select {
-                        Versions.key64 eq map.key
-                    }.limit(1).toList().firstOrNull()?.get(Versions.mapId)?.value ?: 0
-
-                    mq.publish("beatmaps", "maps.$mapId.updated", null, mapId)
+                ).firstOrNull()?.also {
+                    Beatmap
+                        .update({
+                            Beatmap.id eq it.id
+                        }) {
+                            it[name] = map.name
+                            it[description] = map.description
+                            it[automapper] = map.metadata.automapper != null
+                            it[upVotes] = map.stats.upVotes
+                            it[downVotes] = map.stats.downVotes
+                            it[beatsaverDownloads] = map.stats.downloads
+                        }
                 }
-            } else {
-                mq.publish("beatmaps", "beatsaver.download", null, DownloadAttempts(map))
+            }?.let { oldInfo ->
+                // Check if anything important changed
+                if (map.name != oldInfo.name || map.description != oldInfo.description || (map.metadata.automapper != null) != oldInfo.automapper) {
+                    mq.publish("beatmaps", "maps.${oldInfo.id.value}.updated", null, oldInfo.id.value)
+                }
             }
+        } else {
+            mq.publish("beatmaps", "beatsaver.download", null, DownloadAttempts(map))
         }
     }
 
@@ -123,7 +119,7 @@ fun startScraper(mq: RabbitMQ) {
         transaction(Connection.TRANSACTION_READ_COMMITTED, 3) {
             if (Versions.select { Versions.hash eq map.hash }.count() > 0) {
                 // Another message got there first
-                return@transaction
+                return@transaction null
             }
 
             val user = User.select {
@@ -199,9 +195,11 @@ fun startScraper(mq: RabbitMQ) {
                         .toOutputStream(newImageStream)
                     coverFile.writeBytes(newImageStream.toByteArray())
                 }
-
-                mq.publish("beatmaps", "maps.${beatmapId.value}.updated", null, beatmapId.value)
             }
+
+            beatmapId.value
+        }?.let {
+            mq.publish("beatmaps", "maps.$it.updated", null, it)
         }
         println("done ${map.hash}")
     }
