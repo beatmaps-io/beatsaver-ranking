@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
 import net.coobird.thumbnailator.Thumbnails
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.coalesce
+import org.jetbrains.exposed.sql.transactions.transaction
 import pl.jutupe.ktor_rabbitmq.RabbitMQ
 import pl.jutupe.ktor_rabbitmq.publish
 import java.io.ByteArrayOutputStream
@@ -115,6 +115,7 @@ fun startScraper(mq: RabbitMQ) {
 
         val zipFile = File(localFolder(map.hash), "${map.hash}.zip")
         val coverFile = File(localCoverFolder(map.hash), "${map.hash}.jpg")
+        val audioFile = File(localAudioFolder(map.hash), "${map.hash}.mp3")
 
         transaction(Connection.TRANSACTION_READ_COMMITTED, 3) {
             if (Versions.select { Versions.hash eq map.hash }.count() > 0) {
@@ -195,6 +196,8 @@ fun startScraper(mq: RabbitMQ) {
                         .toOutputStream(newImageStream)
                     coverFile.writeBytes(newImageStream.toByteArray())
                 }
+
+                audioFile.writeBytes(generatePreview())
             }
 
             beatmapId.value

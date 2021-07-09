@@ -29,6 +29,15 @@ dependencies {
         maven { url = uri("https://dl.bintray.com/kotlin/kotlinx") }
         maven { url = uri("https://dl.bintray.com/kotlin/ktor") }
         maven { url = uri("https://jitpack.io") }
+        ivy {
+            url = uri("https://github.com")
+
+            patternLayout {
+                artifact("/[organisation]/releases/download/v[revision]/[module]-[revision].[ext]")
+            }
+
+            metadataSources { artifact() }
+        }
     }
 
     implementation("io.ktor:ktor-jackson:$ktorVersion")
@@ -51,6 +60,7 @@ dependencies {
     implementation("net.coobird:thumbnailator:0.4.13")
     implementation("com.twelvemonkeys.imageio:imageio-jpeg:3.6.1")
     implementation("org.sejda.imageio:webp-imageio:0.1.6")
+    implementation("com.tagtraum:ffsampledsp-complete:0.9.32")
 
     implementation("com.github.JUtupe:ktor-rabbitmq:0.2.0")
     implementation("com.rabbitmq:amqp-client:5.9.0")
@@ -67,5 +77,5 @@ tasks.withType<KotlinCompile>() {
 }
 
 application {
-    mainClassName = "ServerKt"
+    mainClassName = "io.beatmaps.beatsaver.ServerKt"
 }
