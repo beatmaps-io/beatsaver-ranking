@@ -1,7 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.5.10"
+    kotlin("jvm") version "1.5.30-RC"
+    id("org.jlleitschuh.gradle.ktlint") version "10.1.0"
     application
 }
 
@@ -11,13 +12,16 @@ group = "io.beatmaps"
 version = "1.0-SNAPSHOT"
 
 kotlin {
+    jvmToolchain {
+        (this as JavaToolchainSpec).languageVersion.set(JavaLanguageVersion.of(15))
+    }
     sourceSets.all {
-        languageSettings.useExperimentalAnnotation("kotlin.io.path.ExperimentalPathApi")
-        languageSettings.useExperimentalAnnotation("io.ktor.locations.KtorExperimentalLocationsAPI")
-        languageSettings.useExperimentalAnnotation("kotlinx.coroutines.flow.FlowPreview")
-        languageSettings.useExperimentalAnnotation("kotlin.time.ExperimentalTime")
-        languageSettings.useExperimentalAnnotation("io.ktor.util.KtorExperimentalAPI")
-        languageSettings.useExperimentalAnnotation("kotlin.ExperimentalUnsignedTypes")
+        languageSettings.optIn("kotlin.io.path.ExperimentalPathApi")
+        languageSettings.optIn("io.ktor.locations.KtorExperimentalLocationsAPI")
+        languageSettings.optIn("kotlinx.coroutines.flow.FlowPreview")
+        languageSettings.optIn("kotlin.time.ExperimentalTime")
+        languageSettings.optIn("io.ktor.util.KtorExperimentalAPI")
+        languageSettings.optIn("kotlin.ExperimentalUnsignedTypes")
     }
 }
 
@@ -42,28 +46,16 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
+    implementation("org.litote.kmongo:kmongo-coroutine:4.2.8")
 
-    // Multimedia
-    implementation("org.jaudiotagger:jaudiotagger:2.0.1")
-    implementation("net.coobird:thumbnailator:0.4.13")
-    implementation("com.twelvemonkeys.imageio:imageio-jpeg:3.6.1")
-    implementation("org.sejda.imageio:webp-imageio:0.1.6")
-    implementation("com.tagtraum:ffsampledsp-complete:0.9.32")
-
-    implementation("com.github.JUtupe:ktor-rabbitmq:0.2.0")
-    implementation("com.rabbitmq:amqp-client:5.9.0")
-
-    implementation("io.beatmaps:Common")
-    implementation("io.beatmaps:CommonMP")
-
-    runtimeOnly(files("BeatMaps-BeatSage-1.0-SNAPSHOT.jar"))
+    implementation("io.beatmaps:BeatMaps-Common:+")
+    implementation("io.beatmaps:BeatMaps-CommonMP:+")
 }
 
-tasks.withType<KotlinCompile>() {
-    dependsOn(gradle.includedBuild("Common").task(":build"))
+tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = "15"
 }
 
 application {
-    mainClassName = "io.beatmaps.beatsaver.ServerKt"
+    mainClass.set("io.beatmaps.scoresaber.ServerKt")
 }

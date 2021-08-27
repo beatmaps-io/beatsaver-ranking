@@ -1,13 +1,17 @@
-rootProject.name = "BeatMaps-Beatsaver"
+rootProject.name = "BeatMaps-Scoresaber"
 
-includeBuild("../Common") {
-    dependencySubstitution {
-        substitute(module("io.beatmaps:Common")).with(project(":"))
+if (File("../beatsaver-common").exists()) {
+    includeBuild("../beatsaver-common") {
+        dependencySubstitution {
+            substitute(module("io.beatmaps:BeatMaps-Common")).using(project(":"))
+        }
     }
 }
 
-includeBuild("../CommonMP") {
-    dependencySubstitution {
-        substitute(module("io.beatmaps:CommonMP")).with(project(":"))
+if (File("../beatsaver-common-mp").exists()) {
+    includeBuild("../beatsaver-common-mp") {
+        dependencySubstitution {
+            substitute(module("io.beatmaps:BeatMaps-CommonMP")).using(project(":"))
+        }
     }
 }
