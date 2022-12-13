@@ -2,7 +2,7 @@ package io.beatmaps.scoresaber
 
 import io.beatmaps.common.db.setupDB
 import io.beatmaps.common.setupLogging
-import io.ktor.application.Application
+import io.ktor.server.application.Application
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 

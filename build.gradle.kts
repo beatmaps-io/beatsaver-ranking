@@ -1,8 +1,9 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
-    kotlin("jvm") version "1.5.30-RC"
-    id("org.jlleitschuh.gradle.ktlint") version "10.1.0"
+    kotlin("jvm") version "1.7.10"
+    id("org.jlleitschuh.gradle.ktlint") version "11.0.0"
     application
 }
 
@@ -13,7 +14,7 @@ version = "1.0-SNAPSHOT"
 
 kotlin {
     jvmToolchain {
-        (this as JavaToolchainSpec).languageVersion.set(JavaLanguageVersion.of(15))
+        languageVersion.set(JavaLanguageVersion.of(16))
     }
     sourceSets.all {
         languageSettings.optIn("kotlin.io.path.ExperimentalPathApi")
@@ -32,30 +33,35 @@ dependencies {
         maven { url = uri("https://artifactory.kirkstall.top-cat.me") }
     }
 
-    implementation("io.ktor:ktor-jackson:$ktorVersion")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.6.1")
+    implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
+    implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.12.5")
 
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
-    implementation("io.ktor:ktor-html-builder:$ktorVersion")
+    implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-html-jvm:0.7.3")
     implementation("io.ktor:ktor-client-apache:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.2.3")
+    implementation("ch.qos.logback:logback-classic:1.2.5")
 
     // Database library
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
-    implementation("org.litote.kmongo:kmongo-coroutine:4.2.8")
 
-    implementation("io.beatmaps:BeatMaps-Common:+")
     implementation("io.beatmaps:BeatMaps-CommonMP:+")
 }
 
 tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "15"
+    kotlinOptions.jvmTarget = "16"
 }
 
 application {
     mainClass.set("io.beatmaps.scoresaber.ServerKt")
+}
+
+ktlint {
+    reporters {
+        reporter(ReporterType.CHECKSTYLE)
+    }
 }
