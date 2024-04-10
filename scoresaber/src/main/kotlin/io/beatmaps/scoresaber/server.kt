@@ -6,8 +6,8 @@ import io.ktor.server.application.Application
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 
-val port = System.getenv("LISTEN_PORT")?.toIntOrNull() ?: 3031
-val host = System.getenv("LISTEN_HOST") ?: "127.0.0.1"
+val port = System.getenv("LISTEN_PORT_SS")?.toIntOrNull() ?: 3031
+val host = System.getenv("LISTEN_HOST_SS") ?: System.getenv("LISTEN_HOST") ?: "127.0.0.1"
 
 fun main() {
     setupLogging()

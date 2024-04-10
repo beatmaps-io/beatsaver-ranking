@@ -1,4 +1,4 @@
-rootProject.name = "BeatMaps-Scoresaber"
+rootProject.name = "BeatMaps-Ranking"
 
 if (File("../beatsaver-common-mp").exists()) {
     includeBuild("../beatsaver-common-mp") {
@@ -7,3 +7,5 @@ if (File("../beatsaver-common-mp").exists()) {
         }
     }
 }
+
+include("scoresaber", "beatleader")
