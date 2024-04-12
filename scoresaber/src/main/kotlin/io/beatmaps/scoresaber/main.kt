@@ -148,7 +148,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
                         it[Difficulty.qualifiedAt] = coalesce(
                             LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate),
                             Difficulty.qualifiedAt,
-                            NowExpression(Difficulty.qualifiedAt.columnType)
+                            NowExpression(Difficulty.qualifiedAt)
                         )
                     }
             }
@@ -208,12 +208,12 @@ suspend fun updateRanked(
                     it[Difficulty.rankedAt] = coalesce(
                         LiteralOp(Difficulty.rankedAt.columnType, diff.rankedDate),
                         Difficulty.rankedAt,
-                        NowExpression(Difficulty.rankedAt.columnType)
+                        NowExpression(Difficulty.rankedAt)
                     )
                     it[Difficulty.qualifiedAt] = coalesce(
                         LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate),
                         Difficulty.qualifiedAt,
-                        NowExpression(Difficulty.qualifiedAt.columnType)
+                        NowExpression(Difficulty.qualifiedAt)
                     )
                 }
         }
@@ -228,7 +228,7 @@ suspend fun updateRanked(
                     it[bColumn] = coalesce(
                         LiteralOp(Beatmap.rankedAt.columnType, entry.value.mapNotNull { e -> dateSelector(e) }.minOrNull()),
                         Beatmap.rankedAt,
-                        NowExpression(Beatmap.rankedAt.columnType)
+                        NowExpression(Beatmap.rankedAt)
                     )
                 }
         }
