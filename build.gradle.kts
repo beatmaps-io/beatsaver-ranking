@@ -3,6 +3,7 @@ import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     kotlin("jvm") version "1.9.20"
+    kotlin("plugin.serialization") version "1.9.20"
     id("org.jlleitschuh.gradle.ktlint") version "11.0.0"
     application
 }
@@ -14,7 +15,7 @@ version = "1.0-SNAPSHOT"
 
 kotlin {
     jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(16))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
     sourceSets.all {
         languageSettings.optIn("kotlin.io.path.ExperimentalPathApi")
@@ -35,7 +36,7 @@ dependencies {
 }
 
 tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "16"
+    kotlinOptions.jvmTarget = "21"
 }
 
 ktlint {

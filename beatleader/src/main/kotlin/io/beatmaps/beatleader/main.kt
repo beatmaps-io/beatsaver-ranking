@@ -1,14 +1,12 @@
 package io.beatmaps.beatleader
 
-import io.beatmaps.common.BLGameMode
-import io.beatmaps.common.api.EDifficulty
-import io.beatmaps.common.api.searchEnum
-import io.beatmaps.common.api.searchEnumOrNull
+import io.beatmaps.beatleader.dto.BeatLeaderLeaderboard
+import io.beatmaps.beatleader.dto.BeatLeaderList
 import io.beatmaps.common.db.NowExpression
 import io.beatmaps.common.dbo.Beatmap
 import io.beatmaps.common.dbo.Difficulty
 import io.beatmaps.common.dbo.Versions
-import io.beatmaps.common.randomClient
+import io.beatmaps.common.jsonClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
@@ -28,10 +26,11 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.Duration
-import java.time.Instant
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.logging.Logger
+import kotlinx.datetime.Instant
+import kotlinx.datetime.toJavaInstant
 
 val es: ExecutorService = Executors.newFixedThreadPool(8)
 val logger = Logger.getLogger("bmio.scraper")
@@ -81,30 +80,6 @@ fun startScraper() {
     }
 }
 
-data class BeatLeaderPageMetadata(val total: Int, val page: Int, val itemsPerPage: Int)
-data class BeatLeaderList(val metadata: BeatLeaderPageMetadata?, val data: List<BeatLeaderLeaderboard>)
-data class BeatLeaderLeaderboard(
-    val song: BeatLeaderSong,
-    val difficulty: BeatLeaderDifficulty
-) {
-    val characteristic = searchEnumOrNull<BLGameMode>(difficulty.modeName)?.characteristic // null means it's an artificial characteristic created by a mod
-    val diff = searchEnum<EDifficulty>(difficulty.difficultyName)
-}
-data class BeatLeaderSong(
-    val hash: String,
-    val uploadTime: Instant
-)
-data class BeatLeaderDifficulty(
-    val stars: Float,
-    val difficultyName: String,
-    val modeName: String,
-    val status: Int,
-
-    val nominatedTime: Instant?,
-    val qualifiedTime: Instant?,
-    val rankedTime: Instant?
-)
-
 suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
     val qualified = scrapeRanked(null, "qualified", { it.difficulty.qualifiedTime }, { it.difficulty.status == qualifiedStatus })
     // Expand to include ALL hashes of qualified maps
@@ -113,8 +88,8 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
         val otherVersions = Versions.alias("v2")
         Versions
             .join(otherVersions, JoinType.INNER, otherVersions[Versions.mapId], Versions.mapId)
-            .slice(otherVersions[Versions.hash])
-            .select {
+            .select(otherVersions[Versions.hash])
+            .where {
                 Versions.hash inList groupedByHash.keys
             }
             .map { it[otherVersions[Versions.hash]] }
@@ -136,7 +111,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
             .join(Versions, JoinType.INNER, Versions.mapId, Beatmap.id)
             .update({ Versions.hash inList toAdd }) {
                 it[Beatmap.blQualified] = true
-                it[Beatmap.blQualifiedAt] = coalesce(Beatmap.blQualifiedAt, NowExpression(Beatmap.blQualifiedAt.columnType))
+                it[Beatmap.blQualifiedAt] = coalesce(Beatmap.blQualifiedAt, NowExpression(Beatmap.blQualifiedAt))
             }
         toAdd.forEach { hash ->
             groupedByHash[hash]?.forEach diff@{ leaderboard ->
@@ -146,7 +121,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
                     .join(Versions, JoinType.INNER, Versions.id, Difficulty.versionId)
                     .update({ Versions.hash eq leaderboard.song.hash.lowercase() and (Difficulty.characteristic eq characteristic) and (Difficulty.difficulty eq leaderboard.diff) }) {
                         it[Difficulty.blQualifiedAt] = coalesce(
-                            LiteralOp(Difficulty.blQualifiedAt.columnType, leaderboard.difficulty.qualifiedTime),
+                            LiteralOp(Difficulty.blQualifiedAt.columnType, leaderboard.difficulty.qualifiedTime?.toJavaInstant()),
                             Difficulty.blQualifiedAt,
                             NowExpression(Difficulty.blQualifiedAt)
                         )
@@ -160,15 +135,15 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
 }
 
 suspend fun scrapeRanked(
-    mostRecentRanked: Instant?,
+    mostRecentRanked: java.time.Instant?,
     filter: String,
     dateSelector: (BeatLeaderLeaderboard) -> Instant?,
     boolSelector: (BeatLeaderLeaderboard) -> Boolean,
     page: Int = 1,
     pageSize: Int = 20
 ): List<BeatLeaderLeaderboard> {
-    logger.info("Loading $filter page $page")
-    val json = randomClient.get("https://api.beatleader.xyz/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page") {
+    logger.info { "Loading $filter page $page" }
+    val json = jsonClient.get("https://api.beatleader.xyz/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page") {
         timeout {
             socketTimeoutMillis = 30000
             requestTimeoutMillis = 60000
@@ -176,7 +151,7 @@ suspend fun scrapeRanked(
     }.body<BeatLeaderList>()
 
     val obj = json.data.filter {
-        val d = dateSelector(it)
+        val d = dateSelector(it)?.toJavaInstant()
         boolSelector(it) && (mostRecentRanked == null || d == null || d > mostRecentRanked)
     }
 
@@ -189,8 +164,8 @@ suspend fun scrapeRanked(
 }
 
 suspend fun updateRanked(
-    dColumn: Column<Instant?> = Difficulty.blRankedAt,
-    bColumn: Column<Instant?> = Beatmap.blRankedAt,
+    dColumn: Column<java.time.Instant?> = Difficulty.blRankedAt,
+    bColumn: Column<java.time.Instant?> = Beatmap.blRankedAt,
     bBoolColumn: Column<Boolean> = Beatmap.blRanked,
     filter: String = "ranked",
     dateSelector: (BeatLeaderLeaderboard) -> Instant? = { it.difficulty.rankedTime },
@@ -219,12 +194,12 @@ suspend fun updateRanked(
                 .update({ Versions.hash eq leaderboard.song.hash.lowercase() and (Difficulty.characteristic eq characteristic) and (Difficulty.difficulty eq leaderboard.diff) }) {
                     it[Difficulty.blStars] = if (leaderboard.difficulty.stars > 0) leaderboard.difficulty.stars.toBigDecimal() else null
                     it[Difficulty.blRankedAt] = coalesce(
-                        LiteralOp(Difficulty.blRankedAt.columnType, leaderboard.difficulty.rankedTime),
+                        LiteralOp(Difficulty.blRankedAt.columnType, leaderboard.difficulty.rankedTime?.toJavaInstant()),
                         Difficulty.blRankedAt,
                         NowExpression(Difficulty.blRankedAt)
                     )
                     it[Difficulty.blQualifiedAt] = coalesce(
-                        LiteralOp(Difficulty.blQualifiedAt.columnType, leaderboard.difficulty.qualifiedTime),
+                        LiteralOp(Difficulty.blQualifiedAt.columnType, leaderboard.difficulty.qualifiedTime?.toJavaInstant()),
                         Difficulty.blQualifiedAt,
                         NowExpression(Difficulty.blQualifiedAt)
                     )
@@ -239,7 +214,7 @@ suspend fun updateRanked(
                     // Otherwise use existing value
                     // Lastly use current date
                     it[bColumn] = coalesce(
-                        LiteralOp(Beatmap.blRankedAt.columnType, entry.value.mapNotNull { e -> dateSelector(e) }.minOrNull()),
+                        LiteralOp(Beatmap.blRankedAt.columnType, entry.value.mapNotNull { e -> dateSelector(e) }.minOrNull()?.toJavaInstant()),
                         Beatmap.blRankedAt,
                         NowExpression(Beatmap.blRankedAt)
                     )
