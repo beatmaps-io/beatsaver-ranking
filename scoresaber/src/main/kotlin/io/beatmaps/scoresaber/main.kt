@@ -1,13 +1,12 @@
 package io.beatmaps.scoresaber
 
-import io.beatmaps.common.SSGameMode
-import io.beatmaps.common.api.EDifficulty
-import io.beatmaps.common.api.searchEnum
 import io.beatmaps.common.db.NowExpression
 import io.beatmaps.common.dbo.Beatmap
 import io.beatmaps.common.dbo.Difficulty
 import io.beatmaps.common.dbo.Versions
-import io.beatmaps.common.randomClient
+import io.beatmaps.common.jsonClient
+import io.beatmaps.scoresaber.dto.ScoreSaberList
+import io.beatmaps.scoresaber.dto.ScoreSaberSong
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
@@ -15,6 +14,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
+import kotlinx.datetime.Instant
+import kotlinx.datetime.toJavaInstant
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.LiteralOp
@@ -27,7 +28,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.Duration
-import java.time.Instant
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.logging.Logger
@@ -40,8 +40,8 @@ fun startScraper() {
         val qualifiedHashes = transaction {
             Versions
                 .join(Beatmap, JoinType.INNER, Beatmap.id, Versions.mapId)
-                .slice(Versions.hash)
-                .select {
+                .select(Versions.hash)
+                .where {
                     Beatmap.qualified eq true
                 }.map { it[Versions.hash] }.toHashSet()
         }
@@ -75,38 +75,6 @@ fun startScraper() {
     }
 }
 
-data class SSPagedMetadata(val total: Int, val page: Int, val itemsPerPage: Int)
-data class ScoreSaberList(val metadata: SSPagedMetadata?, val leaderboards: List<ScoreSaberSong>)
-data class ScoreSaberSong(
-    val id: Int,
-    val songHash: String,
-    val songName: String,
-    val songSubName: String,
-    val songAuthorName: String,
-    val levelAuthorName: String,
-    val difficulty: SSLeaderboardInfoDiff,
-    val maxScore: Long,
-    val createdDate: Instant?,
-    val rankedDate: Instant?,
-    val qualifiedDate: Instant?,
-    val lovedDate: Instant?,
-    val ranked: Boolean,
-    val qualified: Boolean,
-    val loved: Boolean,
-    val maxPP: Int,
-    val stars: Float,
-    val plays: Long,
-    val dailyPlays: Int,
-    val positiveModifiers: Boolean,
-    val playerScore: Int?,
-    val coverImage: String,
-    val difficulties: List<SSLeaderboardInfoDiff>?
-) {
-    val characteristic = searchEnum<SSGameMode>(difficulty.gameMode).characteristic
-    val diff = EDifficulty.fromInt(difficulty.difficulty) ?: throw IllegalArgumentException("No enum constant for diff ${difficulty.difficulty}")
-}
-data class SSLeaderboardInfoDiff(val leaderboardId: Int, val difficulty: Int, val gameMode: String, val difficultyRaw: String)
-
 suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
     val qualified = scrapeRanked(1, null, "qualified", false, { it.qualifiedDate }) { it.qualified }
     // Expand to include ALL hashes of qualified maps
@@ -138,7 +106,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
             .join(Versions, JoinType.INNER, Versions.mapId, Beatmap.id)
             .update({ Versions.hash inList toAdd }) {
                 it[Beatmap.qualified] = true
-                it[Beatmap.qualifiedAt] = coalesce(Beatmap.qualifiedAt, NowExpression(Beatmap.qualifiedAt.columnType))
+                it[Beatmap.qualifiedAt] = coalesce(Beatmap.qualifiedAt, NowExpression(Beatmap.qualifiedAt))
             }
         toAdd.forEach { hash ->
             groupedByHash[hash]?.forEach { diff ->
@@ -146,7 +114,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
                     .join(Versions, JoinType.INNER, Versions.id, Difficulty.versionId)
                     .update({ Versions.hash eq diff.songHash.lowercase() and (Difficulty.characteristic eq diff.characteristic) and (Difficulty.difficulty eq diff.diff) }) {
                         it[Difficulty.qualifiedAt] = coalesce(
-                            LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate),
+                            LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate?.toJavaInstant()),
                             Difficulty.qualifiedAt,
                             NowExpression(Difficulty.qualifiedAt)
                         )
@@ -159,15 +127,18 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
     qualifiedHashes.addAll(qualifiedMaps)
 }
 
-suspend fun scrapeRanked(page: Int, mostRecentRanked: Instant?, filter: String, unique: Boolean, dateSelector: (ScoreSaberSong) -> Instant?, boolSelector: (ScoreSaberSong) -> Boolean): List<ScoreSaberSong> {
+suspend fun scrapeRanked(page: Int, mostRecentRanked: java.time.Instant?, filter: String, unique: Boolean, dateSelector: (ScoreSaberSong) -> Instant?, boolSelector: (ScoreSaberSong) -> Boolean): List<ScoreSaberSong> {
     logger.info("Loading $filter page $page")
-    val json = randomClient.get("https://scoresaber.com/api/leaderboards?$filter=true&category=1&unique=$unique&page=$page") {
+    val json = jsonClient.get("https://scoresaber.com/api/leaderboards?$filter=true&category=1&unique=$unique&page=$page") {
         timeout {
             socketTimeoutMillis = 30000
             requestTimeoutMillis = 60000
         }
     }.body<ScoreSaberList>()
-    val obj = json.leaderboards.filter { val d = dateSelector(it); boolSelector(it) && (mostRecentRanked == null || d == null || d > mostRecentRanked) }
+    val obj = json.leaderboards.filter {
+        val d = dateSelector(it)?.toJavaInstant()
+        boolSelector(it) && (mostRecentRanked == null || d == null || d > mostRecentRanked)
+    }
 
     return if (obj.isNotEmpty()) {
         delay(Duration.ofMillis(20L))
@@ -177,10 +148,10 @@ suspend fun scrapeRanked(page: Int, mostRecentRanked: Instant?, filter: String, 
     }
 }
 
-//suspend fun updateQual() = updateRanked(Difficulty.qualifiedAt, Beatmap.qualifiedAt, Beatmap.qualified, "qualified") { it.qualifiedDate }
+// suspend fun updateQual() = updateRanked(Difficulty.qualifiedAt, Beatmap.qualifiedAt, Beatmap.qualified, "qualified") { it.qualifiedDate }
 suspend fun updateRanked(
-    dColumn: Column<Instant?> = Difficulty.rankedAt,
-    bColumn: Column<Instant?> = Beatmap.rankedAt,
+    dColumn: Column<java.time.Instant?> = Difficulty.rankedAt,
+    bColumn: Column<java.time.Instant?> = Beatmap.rankedAt,
     bBoolColumn: Column<Boolean> = Beatmap.ranked,
     filter: String = "ranked",
     dateSelector: (ScoreSaberSong) -> Instant? = { it.rankedDate },
@@ -206,12 +177,12 @@ suspend fun updateRanked(
                 .update({ Versions.hash eq diff.songHash.lowercase() and (Difficulty.characteristic eq diff.characteristic) and (Difficulty.difficulty eq diff.diff) }) {
                     it[Difficulty.stars] = if (diff.stars > 0) diff.stars.toBigDecimal() else null
                     it[Difficulty.rankedAt] = coalesce(
-                        LiteralOp(Difficulty.rankedAt.columnType, diff.rankedDate),
+                        LiteralOp(Difficulty.rankedAt.columnType, diff.rankedDate?.toJavaInstant()),
                         Difficulty.rankedAt,
                         NowExpression(Difficulty.rankedAt)
                     )
                     it[Difficulty.qualifiedAt] = coalesce(
-                        LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate),
+                        LiteralOp(Difficulty.qualifiedAt.columnType, diff.qualifiedDate?.toJavaInstant()),
                         Difficulty.qualifiedAt,
                         NowExpression(Difficulty.qualifiedAt)
                     )
@@ -226,7 +197,7 @@ suspend fun updateRanked(
                     // Otherwise use existing value
                     // Lastly use current date
                     it[bColumn] = coalesce(
-                        LiteralOp(Beatmap.rankedAt.columnType, entry.value.mapNotNull { e -> dateSelector(e) }.minOrNull()),
+                        LiteralOp(Beatmap.rankedAt.columnType, entry.value.mapNotNull { e -> dateSelector(e) }.minOrNull()?.toJavaInstant()),
                         Beatmap.rankedAt,
                         NowExpression(Beatmap.rankedAt)
                     )
