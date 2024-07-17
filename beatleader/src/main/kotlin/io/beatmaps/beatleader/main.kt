@@ -55,7 +55,7 @@ fun startScraper() {
 
         while (true) {
             try {
-                logger.info("BeatLeader quals")
+                logger.info { "BeatLeader quals" }
                 scrapeQualified(qualifiedHashes)
             } catch (e: Exception) {
                 logger.severe(e.message)
@@ -98,7 +98,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
     val toRemove = qualifiedHashes.minus(qualifiedMaps)
     val toAdd = qualifiedMaps.minus(qualifiedHashes)
 
-    logger.info("${toRemove.size} qualified maps to remove, ${toAdd.size} qualified maps to add")
+    logger.info { "${toRemove.size} qualified maps to remove, ${toAdd.size} qualified maps to add" }
 
     transaction {
         Beatmap
@@ -142,8 +142,9 @@ suspend fun scrapeRanked(
     page: Int = 1,
     pageSize: Int = 20
 ): List<BeatLeaderLeaderboard> {
-    logger.info { "Loading $filter page $page" }
-    val json = jsonClient.get("https://api.beatleader.xyz/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page") {
+    val from = mostRecentRanked?.epochSecond ?: 0
+    logger.info { "Loading $filter from $from page $page" }
+    val json = jsonClient.get("https://api.beatleader.xyz/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page&date_from=$from") {
         timeout {
             socketTimeoutMillis = 30000
             requestTimeoutMillis = 60000
@@ -181,11 +182,11 @@ suspend fun updateRanked(
     val obj = scrapeRanked(mostRecentRanked, filter, dateSelector, boolSelector)
     val groupedByHash = obj.groupBy { it.song.hash }
 
-    logger.info("${obj.size} ranked diffs to update")
+    logger.info { "${obj.size} ranked diffs to update" }
 
     transaction {
         obj.forEachIndexed diff@{ idx, leaderboard ->
-            if (idx % 100 == 0) logger.info("Updated $idx diffs")
+            if (idx % 100 == 0) logger.info {"Updated $idx diffs" }
 
             val characteristic = leaderboard.characteristic ?: return@diff
 
