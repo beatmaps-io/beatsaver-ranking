@@ -148,7 +148,7 @@ suspend fun scrapeRanked(page: Int, mostRecentRanked: java.time.Instant?, filter
     }
 }
 
-//suspend fun updateQual() = updateRanked(Difficulty.qualifiedAt, Beatmap.qualifiedAt, Beatmap.qualified, "qualified") { it.qualifiedDate }
+// suspend fun updateQual() = updateRanked(Difficulty.qualifiedAt, Beatmap.qualifiedAt, Beatmap.qualified, "qualified") { it.qualifiedDate }
 suspend fun updateRanked(
     dColumn: Column<java.time.Instant?> = Difficulty.rankedAt,
     bColumn: Column<java.time.Instant?> = Beatmap.rankedAt,

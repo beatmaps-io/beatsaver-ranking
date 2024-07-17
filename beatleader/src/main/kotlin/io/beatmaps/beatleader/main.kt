@@ -14,6 +14,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
+import kotlinx.datetime.Instant
+import kotlinx.datetime.toJavaInstant
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.LiteralOp
@@ -29,8 +31,6 @@ import java.time.Duration
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.logging.Logger
-import kotlinx.datetime.Instant
-import kotlinx.datetime.toJavaInstant
 
 val es: ExecutorService = Executors.newFixedThreadPool(8)
 val logger = Logger.getLogger("bmio.scraper")
@@ -38,7 +38,6 @@ val logger = Logger.getLogger("bmio.scraper")
 // See: https://github.com/BeatLeader/beatleader-website/blob/5c3c35a07264c7587697bea021c4d3130cfac7b5/src/utils/beatleader/format.js#L675
 const val qualifiedStatus = 2
 const val rankedStatus = 3
-
 
 fun startScraper() {
     GlobalScope.launch(es.asCoroutineDispatcher()) {
@@ -186,7 +185,7 @@ suspend fun updateRanked(
 
     transaction {
         obj.forEachIndexed diff@{ idx, leaderboard ->
-            if (idx % 100 == 0) logger.info {"Updated $idx diffs" }
+            if (idx % 100 == 0) logger.info { "Updated $idx diffs" }
 
             val characteristic = leaderboard.characteristic ?: return@diff
 

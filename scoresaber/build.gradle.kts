@@ -4,6 +4,7 @@ plugins {
     application
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 val exposedVersion: String by project
