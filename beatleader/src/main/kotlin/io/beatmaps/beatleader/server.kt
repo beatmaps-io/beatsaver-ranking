@@ -7,6 +7,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import pl.jutupe.ktor_rabbitmq.RabbitMQ
 
 val port = System.getenv("LISTEN_PORT_BL")?.toIntOrNull() ?: 3032
 val host = System.getenv("LISTEN_HOST_BL") ?: System.getenv("LISTEN_HOST") ?: "127.0.0.1"
