@@ -1,8 +1,10 @@
 package io.beatmaps.beatleader
 
 import io.beatmaps.common.db.setupDB
+import io.beatmaps.common.setupAMQP
 import io.beatmaps.common.setupLogging
 import io.ktor.server.application.Application
+import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 
@@ -17,5 +19,9 @@ fun main() {
 }
 
 fun Application.beatleader() {
-    startScraper()
+    val mq = install(RabbitMQ) {
+        setupAMQP(false)
+    }
+
+    startScraper(mq)
 }

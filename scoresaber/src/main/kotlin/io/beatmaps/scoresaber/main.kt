@@ -4,6 +4,7 @@ import io.beatmaps.common.db.NowExpression
 import io.beatmaps.common.dbo.Beatmap
 import io.beatmaps.common.dbo.Difficulty
 import io.beatmaps.common.dbo.Versions
+import io.beatmaps.common.dbo.joinVersions
 import io.beatmaps.common.jsonClient
 import io.beatmaps.scoresaber.dto.ScoreSaberList
 import io.beatmaps.scoresaber.dto.ScoreSaberSong
@@ -23,10 +24,11 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.coalesce
 import org.jetbrains.exposed.sql.alias
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import pl.jutupe.ktor_rabbitmq.RabbitMQInstance
+import pl.jutupe.ktor_rabbitmq.publish
 import java.time.Duration
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -35,7 +37,7 @@ import java.util.logging.Logger
 val es: ExecutorService = Executors.newFixedThreadPool(8)
 val logger = Logger.getLogger("bmio.scraper")
 
-fun startScraper() {
+fun startScraper(mq: RabbitMQInstance) {
     GlobalScope.launch(es.asCoroutineDispatcher()) {
         val qualifiedHashes = transaction {
             Versions
@@ -65,7 +67,7 @@ fun startScraper() {
 
         while (true) {
             try {
-                updateRanked()
+                updateRanked(mq = mq)
             } catch (e: Exception) {
                 logger.severe(e.message)
             }
@@ -83,8 +85,8 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
         val otherVersions = Versions.alias("v2")
         Versions
             .join(otherVersions, JoinType.INNER, otherVersions[Versions.mapId], Versions.mapId)
-            .slice(otherVersions[Versions.hash])
-            .select {
+            .select(otherVersions[Versions.hash])
+            .where {
                 Versions.hash inList groupedByHash.keys
             }
             .map { it[otherVersions[Versions.hash]] }
@@ -155,7 +157,8 @@ suspend fun updateRanked(
     bBoolColumn: Column<Boolean> = Beatmap.ranked,
     filter: String = "ranked",
     dateSelector: (ScoreSaberSong) -> Instant? = { it.rankedDate },
-    boolSelector: (ScoreSaberSong) -> Boolean = { it.ranked }
+    boolSelector: (ScoreSaberSong) -> Boolean = { it.ranked },
+    mq: RabbitMQInstance
 ) {
     val mostRecentRanked = transaction {
         Difficulty
@@ -203,5 +206,13 @@ suspend fun updateRanked(
                     )
                 }
         }
+
+        Beatmap
+            .joinVersions()
+            .select(Beatmap.id)
+            .where { Versions.hash inList groupedByHash.keys }
+            .map { it[Beatmap.id].value }
+    }.forEach {
+        mq.publish("beatmaps", "maps.$it.updated.ranked", null, it)
     }
 }

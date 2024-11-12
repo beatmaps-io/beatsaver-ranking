@@ -28,6 +28,9 @@ dependencies {
     implementation("io.ktor:ktor-client-apache:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
+    implementation("pl.jutupe:ktor-rabbitmq:0.5.19")
+    implementation("com.rabbitmq:amqp-client:5.9.0")
+
     // Database library
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
