@@ -6,6 +6,7 @@ import io.beatmaps.common.db.NowExpression
 import io.beatmaps.common.dbo.Beatmap
 import io.beatmaps.common.dbo.Difficulty
 import io.beatmaps.common.dbo.Versions
+import io.beatmaps.common.dbo.joinVersions
 import io.beatmaps.common.jsonClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -23,10 +24,11 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.coalesce
 import org.jetbrains.exposed.sql.alias
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import pl.jutupe.ktor_rabbitmq.RabbitMQInstance
+import pl.jutupe.ktor_rabbitmq.publish
 import java.time.Duration
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -39,13 +41,13 @@ val logger = Logger.getLogger("bmio.scraper")
 const val qualifiedStatus = 2
 const val rankedStatus = 3
 
-fun startScraper() {
+fun startScraper(mq: RabbitMQInstance) {
     GlobalScope.launch(es.asCoroutineDispatcher()) {
         val qualifiedHashes = transaction {
             Versions
                 .join(Beatmap, JoinType.INNER, Beatmap.id, Versions.mapId)
-                .slice(Versions.hash)
-                .select {
+                .select(Versions.hash)
+                .where {
                     Beatmap.blQualified eq true
                 }.map { it[Versions.hash] }.toHashSet()
         }
@@ -69,7 +71,7 @@ fun startScraper() {
 
         while (true) {
             try {
-                updateRanked()
+                updateRanked(mq = mq)
             } catch (e: Exception) {
                 logger.severe(e.message)
             }
@@ -169,7 +171,8 @@ suspend fun updateRanked(
     bBoolColumn: Column<Boolean> = Beatmap.blRanked,
     filter: String = "ranked",
     dateSelector: (BeatLeaderLeaderboard) -> Instant? = { it.difficulty.rankedTime },
-    boolSelector: (BeatLeaderLeaderboard) -> Boolean = { it.difficulty.status == rankedStatus }
+    boolSelector: (BeatLeaderLeaderboard) -> Boolean = { it.difficulty.status == rankedStatus },
+    mq: RabbitMQInstance
 ) {
     val mostRecentRanked = transaction {
         Difficulty
@@ -220,5 +223,13 @@ suspend fun updateRanked(
                     )
                 }
         }
+
+        Beatmap
+            .joinVersions()
+            .select(Beatmap.id)
+            .where { Versions.hash inList groupedByHash.keys }
+            .map { it[Beatmap.id].value }
+    }.forEach {
+        mq.publish("beatmaps", "maps.$it.updated.ranked", null, it)
     }
 }
