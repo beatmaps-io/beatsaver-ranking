@@ -15,6 +15,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.toJavaInstant
 import org.jetbrains.exposed.sql.Column
@@ -33,6 +34,8 @@ import java.time.Duration
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.logging.Logger
+import kotlin.time.Duration.Companion.hours
+import java.time.Instant as JInstant
 
 val es: ExecutorService = Executors.newFixedThreadPool(8)
 val logger = Logger.getLogger("bmio.scraper")
@@ -129,7 +132,7 @@ suspend fun scrapeQualified(qualifiedHashes: HashSet<String>) {
     qualifiedHashes.addAll(qualifiedMaps)
 }
 
-suspend fun scrapeRanked(page: Int, mostRecentRanked: java.time.Instant?, filter: String, unique: Boolean, dateSelector: (ScoreSaberSong) -> Instant?, boolSelector: (ScoreSaberSong) -> Boolean): List<ScoreSaberSong> {
+suspend fun scrapeRanked(page: Int, mostRecentRanked: JInstant?, filter: String, unique: Boolean, dateSelector: (ScoreSaberSong) -> Instant?, boolSelector: (ScoreSaberSong) -> Boolean): List<ScoreSaberSong> {
     logger.info("Loading $filter page $page")
     val json = jsonClient.get("https://scoresaber.com/api/leaderboards?$filter=true&category=1&unique=$unique&page=$page") {
         timeout {
@@ -137,12 +140,15 @@ suspend fun scrapeRanked(page: Int, mostRecentRanked: java.time.Instant?, filter
             requestTimeoutMillis = 60000
         }
     }.body<ScoreSaberList>()
+
+    val tooSoon = page == 1 && json.leaderboards.firstOrNull()?.rankedDate?.let { Clock.System.now() - it < 4.hours } == true
+
     val obj = json.leaderboards.filter {
         val d = dateSelector(it)?.toJavaInstant()
         boolSelector(it) && (mostRecentRanked == null || d == null || d > mostRecentRanked)
     }
 
-    return if (obj.isNotEmpty()) {
+    return if (!tooSoon && obj.isNotEmpty()) {
         delay(Duration.ofMillis(20L))
         obj.plus(scrapeRanked(page + 1, mostRecentRanked, filter, unique, dateSelector, boolSelector))
     } else {
@@ -152,8 +158,8 @@ suspend fun scrapeRanked(page: Int, mostRecentRanked: java.time.Instant?, filter
 
 // suspend fun updateQual() = updateRanked(Difficulty.qualifiedAt, Beatmap.qualifiedAt, Beatmap.qualified, "qualified") { it.qualifiedDate }
 suspend fun updateRanked(
-    dColumn: Column<java.time.Instant?> = Difficulty.rankedAt,
-    bColumn: Column<java.time.Instant?> = Beatmap.rankedAt,
+    dColumn: Column<JInstant?> = Difficulty.rankedAt,
+    bColumn: Column<JInstant?> = Beatmap.rankedAt,
     bBoolColumn: Column<Boolean> = Beatmap.ranked,
     filter: String = "ranked",
     dateSelector: (ScoreSaberSong) -> Instant? = { it.rankedDate },
