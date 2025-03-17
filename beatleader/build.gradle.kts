@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     application
@@ -11,6 +11,12 @@ val exposedVersion: String by project
 val ktorVersion: String by project
 group = "io.beatmaps"
 version = "1.0-SNAPSHOT"
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
 
 dependencies {
     repositories {
@@ -37,12 +43,8 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
 
-    implementation("io.beatmaps:BeatMaps-CommonMP:+")
+    implementation("io.beatmaps:BeatMaps-CommonMP:1.0.+")
     implementation(kotlin("stdlib-jdk8"))
-}
-
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "21"
 }
 
 application {
@@ -50,4 +52,11 @@ application {
 }
 repositories {
     mavenCentral()
+}
+
+ktlint {
+    version.set("0.50.0")
+    reporters {
+        reporter(ReporterType.CHECKSTYLE)
+    }
 }

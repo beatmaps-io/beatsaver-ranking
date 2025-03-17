@@ -1,10 +1,9 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
-    kotlin("jvm") version "1.9.20"
-    kotlin("plugin.serialization") version "1.9.20"
-    id("org.jlleitschuh.gradle.ktlint") version "11.0.0"
+    kotlin("jvm") version "2.1.0"
+    kotlin("plugin.serialization") version "2.1.0"
+    id("org.jlleitschuh.gradle.ktlint") version "11.5.1"
     application
 }
 
@@ -35,11 +34,8 @@ dependencies {
     }
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "21"
-}
-
 ktlint {
+    version.set("0.50.0")
     reporters {
         reporter(ReporterType.CHECKSTYLE)
     }
