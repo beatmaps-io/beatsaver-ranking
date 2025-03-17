@@ -1,8 +1,7 @@
 package io.beatmaps.scoresaber.dto
 
-import io.beatmaps.common.SSGameMode
 import io.beatmaps.common.api.EDifficulty
-import io.beatmaps.common.api.searchEnum
+import io.beatmaps.common.beatsaber.leaderboard.SSGameMode
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 
@@ -32,6 +31,6 @@ data class ScoreSaberSong(
     val coverImage: String,
     val difficulties: List<SSLeaderboardInfoDiff>? = null
 ) {
-    val characteristic = searchEnum<SSGameMode>(difficulty.gameMode).characteristic
+    val characteristic = SSGameMode.valueOf(difficulty.gameMode).characteristic
     val diff = EDifficulty.fromInt(difficulty.difficulty) ?: throw IllegalArgumentException("No enum constant for diff ${difficulty.difficulty}")
 }

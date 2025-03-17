@@ -12,6 +12,12 @@ val ktorVersion: String by project
 group = "io.beatmaps"
 version = "1.0-SNAPSHOT"
 
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
+
 dependencies {
     repositories {
         mavenCentral()
@@ -41,22 +47,10 @@ dependencies {
     implementation(kotlin("stdlib-jdk8"))
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "21"
-}
-
 application {
     mainClass.set("io.beatmaps.scoresaber.ServerKt")
 }
 
 repositories {
     mavenCentral()
-}
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions {
-    jvmTarget = "21"
-}
-val compileTestKotlin: KotlinCompile by tasks
-compileTestKotlin.kotlinOptions {
-    jvmTarget = "21"
 }
