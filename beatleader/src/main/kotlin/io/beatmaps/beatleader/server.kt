@@ -1,7 +1,7 @@
 package io.beatmaps.beatleader
 
-import io.beatmaps.common.db.setupDB
 import io.beatmaps.common.amqp.setupAMQP
+import io.beatmaps.common.db.setupDB
 import io.beatmaps.common.setupLogging
 import io.ktor.server.application.Application
 import io.ktor.server.application.install

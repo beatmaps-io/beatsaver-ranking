@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     application
@@ -52,4 +52,11 @@ application {
 }
 repositories {
     mavenCentral()
+}
+
+ktlint {
+    version.set("0.50.0")
+    reporters {
+        reporter(ReporterType.CHECKSTYLE)
+    }
 }
