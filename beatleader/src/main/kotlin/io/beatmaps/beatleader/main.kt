@@ -145,7 +145,7 @@ suspend fun scrapeRanked(
 ): List<BeatLeaderLeaderboard> {
     val from = mostRecentRanked?.epochSecond ?: 0
     logger.info { "Loading $filter from $from page $page" }
-    val json = jsonClient.get("https://api.beatleader.com/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page&date_from=$from") {
+    val json = jsonClient.get("https://api.beatleader.com/leaderboards?type=$filter&sortBy=timestamp&order=asc&count=$pageSize&page=$page&date_from=$from&date_range=$filter") {
         timeout {
             socketTimeoutMillis = 30000
             requestTimeoutMillis = 60000
