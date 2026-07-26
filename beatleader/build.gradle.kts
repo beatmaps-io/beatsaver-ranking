@@ -22,7 +22,7 @@ dependencies {
     repositories {
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://artifactory.kirkstall.top-cat.me") }
+        maven { url = uri("https://repo.topc.at/releases") }
     }
 
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.0")
