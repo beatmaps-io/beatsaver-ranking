@@ -22,7 +22,7 @@ data class ScoreSaberSong(
     val ranked: Boolean,
     val qualified: Boolean,
     val loved: Boolean,
-    val maxPP: Int,
+    val maxPP: Float,
     val stars: Float,
     val plays: Long,
     val dailyPlays: Int,
